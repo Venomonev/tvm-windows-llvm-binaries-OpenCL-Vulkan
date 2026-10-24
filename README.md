@@ -1,6 +1,6 @@
-# TVM Windows x64 Binaries with LLVM Support
-
-**Pre-built TVM libraries for Windows with LLVM codegen enabled - the missing piece for MLC-LLM model conversion on Windows.**
+# TVM Windows x64 Binaries with LLVM Support, and MLC-LLM Windows x64 with OpenCL Support build Steps
+# TVM Windows x64 支持转换模型的构建方案，以及构建MLC-LLM支持GPU OpenCL推理
+**Pre-built TVM libraries for Windows with LLVM codegen enabled - the missing piece for MLC-LLM model conversion, then MLC-LLM Build for Windows x64 GPU OpenCL inference**
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20x64-blue)]()
@@ -11,7 +11,9 @@
 
 ## 🎯 What Is This?
 
-This repository provides **pre-compiled TVM binaries for Windows x64 with LLVM support enabled**.
+This repository provides **pre-compiled TVM binaries for Windows x64 with LLVM support, OpenCL, Vulkan enabled**.**Please note it's now a pre-release version, recommend to [build DLL by yourself](#build-environment) to solve unknown compile or runtime problem - as author currently not fully understand the whole pipeline, and some issues were resolved by Deepseek. I mainly made changes to two sections: [Use Case 2](#use-case-2-testing-model-conversion-and-inference-locally), [Build Steps](#build-environment).**
+
+参考原仓库、MLC-LLM文档和DeepSeek协助完成编译构建。**建议参考[构建步骤](#build-environment)部分自行编译构建TVM和MLC-LLM，因为我还没理清楚过程，可能还存在未知的问题。主要修改内容：[用例2：测试模型转换和推理](#use-case-2-testing-model-conversion-and-inference-locally)、[构建步骤](#build-environment)**
 
 ### Why Does This Exist?
 
@@ -34,10 +36,13 @@ This package contains 4 DLL files built on Windows with LLVM 18.1.8:
 
 | File | Size | Description |
 |------|------|-------------|
-| `tvm.dll` | 109 MB | **Full TVM with LLVM codegen** - Required for model conversion |
+| `tvm_compiler.dll` | 109 MB | **Full TVM with LLVM codegen** - Required for model conversion |
 | `tvm_runtime.dll` | 2.5 MB | Lightweight runtime (no LLVM) - For inference only |
 | `tvm_ffi.dll` | 1.4 MB | Foreign Function Interface - Python/C++ interop layer |
 | `tvm_ffi_testing.dll` | 582 KB | Testing utilities (optional) |
+| `tvm_runtime_extra.dll` | 582 KB |  |
+| `tvm_runtime_opencl.dll` | 316 KB | OpenCL Runtime DLL |
+| `tvm_runtime_vulkan.dll` | 327 KB | Vulkan Runtime DLL |
 
 **Build Configuration:**
 - ✅ LLVM Support: **ENABLED** (v18.1.8)
@@ -45,7 +50,7 @@ This package contains 4 DLL files built on Windows with LLVM 18.1.8:
 - ✅ Build Type: Release (optimized)
 - ✅ Target: Windows x64 only
 - ❌ CUDA: Disabled (CPU-only for model conversion)
-- ❌ OpenCL/Vulkan: Disabled (not needed for conversion)
+- ✅ OpenCL/Vulkan: **ENABLED**
 
 ---
 
@@ -169,7 +174,7 @@ python -m mlc_llm gen_config \
 
 ### What You CANNOT Do
 
-❌ GPU acceleration (CUDA/OpenCL/Vulkan disabled)
+❌ GPU acceleration (CUDA disabled, OpenCL/Vulkan Enabled but you still need to compile MLC-LLM)
 ❌ Android/ARM compilation (this is Windows x64 only)
 ❌ Metal acceleration (macOS only)
 
@@ -179,7 +184,7 @@ python -m mlc_llm gen_config \
 
 ## 📖 Detailed Usage Guide
 
-### Use Case 1: Converting Models for Android/Mobile
+### Use Case 1: Converting Models for Android/Mobile(Not Test)
 
 If you're building an Android app with MLC-LLM:
 
@@ -195,21 +200,49 @@ If you're building an Android app with MLC-LLM:
 
 **This workflow allows you to do heavy model conversion on Windows, then deploy to mobile.**
 
-### Use Case 2: Testing Model Conversion Locally
+### Use Case 2: Testing Model Conversion and inference Locally
+### 用例2：测试模型转换和推理
 
 ```powershell
+pip install apache-tvm-ffi-orcjit==0.1.2
+$env:TVM_HOME = "D:\ProgramData\miniconda3\envs\mlc-chat-venv\mlc-llm\3rdparty\tvm"
+$env:PYTHONPATH = "$env:TVM_HOME\python;$env:PYTHONPATH"
+$env:TVM_LIBRARY_PATH = "$env:TVM_HOME\build-windows\lib"
+
 # Test conversion with a small model first
-python -m mlc_llm convert_weight \
-  .\models\your-model \
-  --quantization q4f16_1 \
-  -o .\dist\your-model-q4f16_1-MLC
+python -m mlcllm convertweight .\models\Qwen2.5-3B-Instruct --quantization q4f161 -o .\models\Qwen2.5-3B-Instruct-q4f161-MLC
 
 # Check output
-ls .\dist\your-model-q4f16_1-MLC
+ls .\models\Qwen2.5-3B-Instruct-q4f161-MLC
 # Should see: params_shard_*.bin, mlc-chat-config.json, tokenizer files
+
+# Generation config
+$env:PATH = "D:\clang+llvm-18.1.8-x86_64-pc-windows-msvc\bin;" + $env:PATH
+python -m mlc_llm gen_config .\models\Qwen2.5-3B-Instruct --quantization q4f16_1 --conv-template qwen2 -o .\models\Qwen2.5-3B-Instruct-q4f16_1-MLC
+
+# Compile model
+#Modify .\mlc-llm\3rdparty\tvm\python\tvm\supportcc.py to fix error when Exporting to disk: clang: error: linker command failed with exit code 1 (use -v to see invocation)
+     cmd += ["D:\\ProgramData\\miniconda3\\envs\\mlc-chat-venv\\mlc-llm\\3rdparty\\tvm\\build-windows\\lib\\tvm_ffi.lib"]
+     win_target = os.getenv("TVM_WIN_TARGET", default="x86_64-pc-windows-msvc")
+        cmd += ["-fuse-ld=lld"]
+        cmd += ["-v"]  -- add this for verbose log output
+
+python -m mlc_llm compile ./models/Qwen2.5-3B-Instruct-q4f16_1-MLC/mlc-chat-config.json --device opencl --host x86_64-pc-windows-msvc -o ./models/Qwen2.5-3B-Instruct-q4f16_1-MLC/Qwen2.5-3B-Instruct-q4f16_1-MLC-opencl.dll
+
+#inference using CPU
+python -m mlc_llm chat --device cpu --model-lib models/Qwen2.5-3B-Instruct-q4f16_1-MLC/Qwen2.5-3B-Instruct-q4f16_1-MLC-cpu.dll ./models/Qwen2.5-3B-Instruct-q4f16_1-MLC
+
+#inference using GPU OpenCL
+python -m mlc_llm chat --device opencl --model-lib models/Qwen2.5-3B-Instruct-q4f16_1-MLC/Qwen2.5-3B-Instruct-q4f16_1-MLC-opencl.dll ./models/Qwen2.5-3B-Instruct-q4f16_1-MLC
+
+#inference using GPU OpenCL device0
+python -m mlc_llm chat --device opencl:0 --model-lib ./models/Qwen2.5-3B-Instruct-q4f16_1-MLC/Qwen2.5-3B-Instruct-q4f16_1-MLC-opencl.dll ./models/Qwen2.5-3B-Instruct-q4f16_1-MLC
+python -m mlc_llm chat --device opencl:0 --model-lib ./models/Qwen3-8B-q4f16_1-MLC/Qwen3-8B-q4f16_1-MLC-opencl.dll  ./models/Qwen3-8B-q4f16_1-MLC
 ```
 
-### Use Case 3: Quantization Experiments
+
+
+### Use Case 3: Quantization Experiments(Not Test)
 
 Try different quantization levels:
 
@@ -281,15 +314,17 @@ pip install -e . --force-reinstall --no-deps
 ---
 
 ## 🏗️ How These Binaries Were Built
+## 🏗️ 构建步骤
 
 These binaries were compiled from source with the following process:
 
 ### Build Environment
-- **OS:** Windows 11 x64
+- **OS:** Windows 10 x64
 - **Compiler:** Microsoft Visual Studio 2022 (MSVC v143)
-- **CMake:** 4.1.2
+- **CMake:** 4.1.6
 - **LLVM:** 18.1.8 (pre-built SDK from GitHub releases)
 - **vcpkg:** Used for libxml2 dependency
+- **miniconda3:** Used for MLC-LLM build
 
 ### Build Steps (for reference)
 
@@ -301,23 +336,44 @@ These binaries were compiled from source with the following process:
 ```powershell
 # Install Visual Studio 2022 Build Tools
 # Download from: https://visualstudio.microsoft.com/downloads/
+# If not having x64 VS 2022 Powershell, copy x86 powershell shortcuts, add '-Arch amd64 -HostArch amd64' to Target, For example:
+C:\Windows\SysWOW64\WindowsPowerShell\v1.0\powershell.exe -noe -c "&{Import-Module """D:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"""; Enter-VsDevShell e95a72f3 -Arch amd64 -HostArch amd64}"
 
-# Install LLVM 18.1.8
+# Install CMake 4.1.2
+# CMake in My Visual Studio 2022 is 3.31.6-msvc6, need to download cmake-4.1.6-windows-x86_64 and add to system PATH
+# Download from: https://github.com/Kitware/CMake/releases
+
+# Install LLVM 18.1.8(Clang, x86_64, MSVC)
 # Download from: https://github.com/llvm/llvm-project/releases/tag/llvmorg-18.1.8
-# Extract to C:\LLVM-Dev\
+# Extract to D:\clang+llvm-18.1.8-x86_64-pc-windows-msvc\
 
 # Install vcpkg
-git clone https://github.com/Microsoft/vcpkg.git C:\vcpkg
-cd C:\vcpkg
+git clone https://github.com/Microsoft/vcpkg.git D:\vcpkg
+cd D:\vcpkg
 .\bootstrap-vcpkg.bat
 
 # Install libxml2 (MSVC-compiled)
 .\vcpkg install libxml2:x64-windows-static
+
+# Based on my compilation process, need to rename file to libxml2s.lib to fix error
+cp .\installed\x64-windows-static\lib\libxml2.lib .\installed\x64-windows-static\lib\libxml2s.lib
 ```
 
 #### 2. Clone and Prepare TVM
 
+2.1 Run x64 VS 2022 Powershell
+
+2.2 In VS 2022 powershell, Run miniconda3 shell
 ```powershell
+cd D:\ProgramData\miniconda3\shell\condabin\
+.\conda-hook.ps1
+```
+
+2.3 Clone MLC-LLM Repo
+```powershell 
+conda activate
+cd your-env
+
 git clone --recursive https://github.com/mlc-ai/mlc-llm.git
 cd mlc-llm\3rdparty\tvm
 
@@ -329,7 +385,7 @@ cd mlc-llm\3rdparty\tvm
 # Change line 15: cmake_minimum_required(VERSION 3.5 FATAL_ERROR)
 ```
 
-#### 3. Configure TVM Build
+#### 3. Configure TVM Build(With OpenCL and Vulkan)
 
 ```powershell
 mkdir build-windows
@@ -340,14 +396,28 @@ cmake .. `
   -A x64 `
   -DCMAKE_BUILD_TYPE=Release `
   -DUSE_LLVM=ON `
-  -DLLVM_DIR="C:/LLVM-Dev/lib/cmake/llvm" `
+  -DLLVM_DIR="D:/clang+llvm-18.1.8-x86_64-pc-windows-msvc/lib/cmake/llvm" `
   -DUSE_CUDA=OFF `
-  -DUSE_OPENCL=OFF `
-  -DUSE_VULKAN=OFF `
-  -DUSE_METAL=OFF
+  -DUSE_OPENCL=ON `
+  -DUSE_VULKAN=ON `
+  -DUSE_METAL=OFF `
+  -DLIBXML2_INCLUDE_DIR="D:/vcpkg/installed/x64-windows-static/include" `
+  -DLIBXML2_LIBRARY="D:/vcpkg/installed/x64-windows-static/lib/libxml2s.lib" `
+  -DCMAKE_LIBRARY_PATH="D:/vcpkg/installed/x64-windows-static/lib" `
+  -DCMAKE_EXE_LINKER_FLAGS="/LIBPATH:D:/vcpkg/installed/x64-windows-static/lib" `
+  -DCMAKE_SHARED_LINKER_FLAGS="/LIBPATH:D:/vcpkg/installed/x64-windows-static/lib"
 ```
 
-#### 4. Build TVM (takes 60-90 minutes)
+To fix GBK Error when running cmake:
+Modified mlc-llm\3rdparty\tvm\CMakeLists.txt, add below 'project(tvm C CXX)'
+
+```
+if(MSVC)
+    add_compile_options("/utf-8")
+endif()
+```
+
+#### 4. Build TVM (takes 40~90 minutes)
 
 ```powershell
 cmake --build . --config Release --parallel 8
@@ -356,20 +426,49 @@ cmake --build . --config Release --parallel 8
 #### 5. Output Files
 
 ```
-build-windows\
-├── Release\
-│   ├── tvm.dll (109 MB)
-│   └── tvm_runtime.dll (2.5 MB)
-└── lib\
-    ├── tvm_ffi.dll (1.4 MB)
-    └── tvm_ffi_testing.dll (582 KB)
+build-windows\lib
+├── tvm_compiler.dll
+├── tvm_ffi.dll
+├── tvm_ffi_testing.dll
+├── tvm_runtime.dll
+└── Release\
+    ├── tvm_runtime_extra.dll
+    ├── tvm_runtime_opencl.dll
+    └── tvm_runtime_vulkan.dll
 ```
+
+#### 6. Build MLC-LLM
+
+export Environment Variable:
+
+```powershell
+$env:TVM_HOME = "D:\ProgramData\miniconda3\envs\mlc-chat-venv\mlc-llm\3rdparty\tvm"
+$env:PYTHONPATH = "$env:TVM_HOME\python;$env:PYTHONPATH"
+$env:TVM_LIBRARY_PATH = "$env:TVM_HOME\build-windows\lib"
+```
+
+Make sure you can find 'OPENCL:ON' running `import tvm`
+
+```powershell
+python -c "import tvm; print(tvm.__file__)"
+python -c "import tvm; print('OpenCL:', tvm.opencl().exist); print('Vulkan:', tvm.vulkan().exist)"
+```
+
+Install MLC-LLM
+
+```powershell
+pip install scikit-build-core
+pip install -e . --no-build-isolation
+``` 
+
+Copy above 7 dll files to MLC-LLM lib(..\mlc-llm\build\Release), then MLC-LLM with OpenCL and Vulkan should be ready.
 
 </details>
 
 **Build Time:** ~2-3 hours (first time)
 **Difficulty:** High (Windows C++ builds are complex)
 **Pain Level:** 🔥🔥🔥🔥🔥 (saved you this nightmare!)
+
 
 ---
 
