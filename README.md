@@ -11,9 +11,9 @@
 
 ## 🎯 What Is This?
 
-This repository provides **pre-compiled TVM binaries for Windows x64 with LLVM support, OpenCL, Vulkan enabled**.**Please note it's now a pre-release version, recommend to [build DLL by yourself](#build-environment) to solve unknown compile or runtime problem - as author currently not fully understand the whole pipeline, and some issues were resolved by Deepseek. I mainly made changes to two sections: [Use Case 2](#use-case-2-testing-model-conversion-and-inference-locally), [Build Steps](#build-environment).**
+This repository provides **pre-compiled TVM binaries for Windows x64 with LLVM support, OpenCL, Vulkan enabled**.**Please note it's now a pre-release version, recommend to [build DLL by yourself](#build-environment), docs/BUILD_PROCESS.md to solve unknown compile or runtime problem - as author currently not fully understand the whole pipeline, and some issues were resolved by Deepseek. I mainly made changes to two sections: [Use Case 2](#use-case-2-testing-model-conversion-and-inference-locally), [Build Steps](#build-environment).**
 
-参考原仓库、MLC-LLM文档和DeepSeek协助完成编译构建。**建议参考[构建步骤](#build-environment)部分自行编译构建TVM和MLC-LLM，因为我还没理清楚过程，可能还存在未知的问题。主要修改内容：[用例2：测试模型转换和推理](#use-case-2-testing-model-conversion-and-inference-locally)、[构建步骤](#build-environment)**
+参考原仓库、MLC-LLM文档和DeepSeek协助完成编译构建。**建议参考[构建步骤](#build-environment)部分、    docs/BUILD_PROCESS.md自行编译构建TVM和MLC-LLM，因为我还没理清楚过程，可能还存在未知的问题。主要修改内容：[用例2：测试模型转换和推理](#use-case-2-testing-model-conversion-and-inference-locally)、[构建步骤](#build-environment)**
 
 ### Why Does This Exist?
 
